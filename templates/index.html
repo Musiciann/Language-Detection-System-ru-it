@@ -1,0 +1,45 @@
+<section class="hero-mini">
+  <h1>Определить язык текста</h1>
+  <p class="tagline">Печатайте текст ниже — результат обновляется в реальном времени — или перетащите один либо несколько .txt-файлов, чтобы проверить их и собрать в общий отчёт.</p>
+  <div class="meta-row">{{meta_row}}</div>
+</section>
+
+<section id="classify">
+  <div class="panel">
+    <textarea id="input-text" placeholder="Начните печатать текст на русском или итальянском…"></textarea>
+    <div class="panel-foot">
+      <div class="chips">
+        <button class="chip" data-example="ru">пример · ru</button>
+        <button class="chip" data-example="it">пример · it</button>
+        <button class="chip" id="btn-clear">очистить</button>
+      </div>
+      <div class="panel-foot-right">
+        <span class="live-indicator"><span class="live-dot" id="live-dot"></span><span>live-режим</span></span>
+        <button class="btn-main" id="btn-add-batch">Добавить в пакет для отчёта →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="results" id="results">
+    <p class="empty-hint">Начните печатать — результаты появятся автоматически.</p>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="file-input" multiple accept=".txt,text/plain" hidden>
+    <p>Перетащите .txt-файлы сюда или <button type="button" class="link-btn" id="browse-btn">выберите на компьютере</button></p>
+    <p class="hint">Каждый файл сразу проверяется всеми тремя методами и добавляется в пакет ниже.</p>
+  </div>
+</section>
+
+<section id="batch">
+  <h2 class="section-title">Пакет для отчёта</h2>
+  <p class="section-sub">Отмеченные документы попадут в общий HTML-отчёт со всеми метриками. Можно указать ожидаемый язык каждого документа — тогда отчёт посчитает точность.</p>
+  <div id="batch-list" class="batch-list">
+    <p class="empty-hint" id="batch-empty">Пакет пуст — добавьте текст кнопкой выше или загрузите файлы.</p>
+  </div>
+  <div class="batch-actions">
+    <button class="btn-ghost" id="btn-batch-clear">Очистить пакет</button>
+    <button class="btn-main" id="btn-generate-report">Сформировать HTML-отчёт →</button>
+  </div>
+  <div id="report-link-box"></div>
+</section>

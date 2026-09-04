@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Отчёт о распознавании языка — {{generated_at}}</title>
+<style>
+  body{font-family:Georgia,'Times New Roman',serif; max-width:960px; margin:40px auto; padding:0 24px; color:#221E17; background:#FBFAF6; line-height:1.6;}
+  h1{font-size:24px; margin-bottom:4px;}
+  h2{font-size:18px; margin-top:36px; border-bottom:1px solid #D9D0B8; padding-bottom:6px;}
+  .sub{color:#6b6558; font-size:14px; margin-top:0;}
+  table{border-collapse:collapse; width:100%; margin-top:14px; font-size:13px;}
+  th,td{border:1px solid #D9D0B8; padding:8px 10px; text-align:left; vertical-align:top;}
+  th{background:#EFE9D8;}
+  .tag{padding:2px 8px; border-radius:3px; font-size:11.5px; display:inline-block;}
+  .tag.ru{background:#F1D9D2; color:#B5432E;}
+  .tag.it{background:#D8E3ED; color:#35618F;}
+  .tag.mismatch{background:#F4D9D9; color:#9C2F2F; outline:1px solid #9C2F2F;}
+  .scores{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; color:#5B5546;}
+  .meta-box{background:#EFE9D8; border-radius:4px; padding:14px 18px; font-size:13px; margin-top:10px;}
+  .meta-box div{margin-bottom:4px;}
+  a{color:#8C6B2F;}
+  .req-table td:first-child{width:38%; color:#5B5546;}
+  @media print{ body{background:#fff;} }
+</style>
+</head>
+<body>
+
+<h1>Отчёт о распознавании языка текстовых документов</h1>
+<p class="sub">Сгенерирован: {{generated_at}} · документов в отчёте: {{item_count}} · вариант 5 (Русский/Итальянский · N-грамм, алфавитный, нейросетевой)</p>
+<button onclick="window.print()" style="font-family:ui-monospace,monospace; padding:8px 16px; cursor:pointer;">Печать</button>
+
+<h2>Исходные условия и требования работы</h2>
+<table class="req-table">
+  <tbody>
+    <tr><td>Цель работы</td><td>Изучить и реализовать методы автоматического определения языка текстового документа на основе сравнения профиля документа с профилями языков.</td></tr>
+    <tr><td>Классифицируемые языки</td><td>Русский, Итальянский</td></tr>
+    <tr><td>Реализуемые методы</td><td>N-грамм (Cavnar &amp; Trenkle), алфавитный (частоты букв), нейросетевой (однослойный перцептрон на биграммах)</td></tr>
+    <tr><td>Требование к выходу системы</td><td>активная ссылка на каждый проверенный документ, результат его идентификации, сводная статистика по коллекции — всё ниже в этом отчёте</td></tr>
+  </tbody>
+</table>
+
+<h2>Снимок обученной модели</h2>
+<div class="meta-box">
+  <div>Обучена: {{trained_at}}</div>
+  <div>Корпус: {{corpus_summary}}</div>
+  <div>Размер N-граммного профиля: топ-{{top_n_grams}}, N=1…{{max_n}} · признаков нейросети: {{bigram_vocab_size}}</div>
+</div>
+
+<h2>Результаты по документам</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Документ</th>
+      <th>Ожид. язык</th>
+      <th>N-грамм</th>
+      <th>Алфавитный</th>
+      <th>Нейросеть</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{items_rows}}
+  </tbody>
+</table>
+
+<h2>Сводная статистика</h2>
+{{summary_block}}
+
+<p class="sub" style="margin-top:40px;">Отчёт сгенерирован приложением «Определитель языка» (вариант 5). Файл самодостаточен — все ссылки на документы ведут в папку attachments/ рядом с этим отчётом.</p>
+
+</body>
+</html>

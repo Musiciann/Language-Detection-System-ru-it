@@ -1,0 +1,51 @@
+<section>
+  <h1>Модель и обучение</h1>
+  <p class="tagline">Что именно выучила система на обучающем корпусе, и как она справляется на тестовой коллекции.</p>
+</section>
+
+<section>
+  <h2 class="section-title">Обучающий корпус</h2>
+  <div class="stats-grid">
+    {{corpus_cards}}
+  </div>
+  <p class="section-sub">Обучена: {{trained_at}} · признаков нейросети (биграмм): {{bigram_vocab_size}} · размер N-граммного профиля: топ-{{top_n_grams}}, N=1…{{max_n}}</p>
+  <button class="btn-ghost" id="btn-retrain">Переобучить модель на текущем корпусе</button>
+  <span class="hint">Пересчитает всё, если вы отредактировали файлы в data/corpus/</span>
+  <div id="retrain-status"></div>
+</section>
+
+<section>
+  <h2 class="section-title">Метод N-грамм — профили языков</h2>
+  <p class="section-sub">30 самых частых N-грамм (подстрок 1–5 символов) для каждого языка, по убыванию частоты.</p>
+  <div class="two-col">
+    {{ngram_tables}}
+  </div>
+</section>
+
+<section>
+  <h2 class="section-title">Алфавитный метод — частоты букв</h2>
+  <p class="section-sub">Топ-20 самых частых букв каждого языка с относительной частотой.</p>
+  <div class="two-col">
+    {{alphabet_tables}}
+  </div>
+</section>
+
+<section>
+  <h2 class="section-title">Нейросетевой метод — веса признаков</h2>
+  <p class="section-sub">Символьные биграммы с наибольшим по модулю весом — какие сочетания сильнее всего "тянут" решение сети к тому или иному языку.</p>
+  <div class="two-col">
+    {{neural_tables}}
+  </div>
+</section>
+
+<section>
+  <h2 class="section-title">Точность на тестовой коллекции</h2>
+  <p class="section-sub">{{test_count}} документов, не входивших в обучение.</p>
+  <div class="stats-grid">
+    {{accuracy_cards}}
+  </div>
+  <table>
+    <thead><tr><th>Документ</th><th>Истинный язык</th><th>N-грамм</th><th>Алфавитный</th><th>Нейросеть</th></tr></thead>
+    <tbody>{{test_rows}}</tbody>
+  </table>
+</section>

@@ -1,0 +1,14 @@
+<section>
+  <h1>Отчёты</h1>
+  <p class="tagline">Все HTML-отчёты, сгенерированные из пакетов документов на главной странице. Каждый — самостоятельный файл в папке reports/, его можно открыть, распечатать или переслать отдельно.</p>
+</section>
+
+<section>
+  <table>
+    <thead><tr><th>Отчёт</th><th>Создан</th><th>Документов</th></tr></thead>
+    <tbody>
+      {{reports_rows}}
+    </tbody>
+  </table>
+  {{empty_hint}}
+</section>
