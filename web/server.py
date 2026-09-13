@@ -127,6 +127,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/retrain":
                 HOLDER.model = api.retrain()
                 self._send_json({"ok": True, "trained_at": HOLDER.model.meta["trained_at"]})
+            elif path == "/api/feedback":
+                body = self._read_json_body()
+                self._send_json(api.feedback(HOLDER.model, body))
             else:
                 self._send_json({"error": "not found"}, 404)
         except ValueError as e:

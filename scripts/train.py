@@ -19,7 +19,16 @@ def main():
         for l, (d, c) in zip(model.meta["corpus_docs"],
                               zip(model.meta["corpus_docs"].values(), model.meta["corpus_chars"].values()))
     ))
-    print(f"Признаков нейросети (биграмм): {model.meta['bigram_vocab_size']}")
+    print(f"Признаков нейросети (биграмм): {model.meta['bigram_vocab_size']} · скрытых нейронов: {model.meta['hidden_size']}")
+
+    print(f"\nКросс-валидация обучающего корпуса ({model.meta['cv_folds']} фолда):")
+    for method, acc in model.cv_accuracy.items():
+        print(f"  {method:<10}: {acc*100:5.1f}%")
+
+    print("\nВеса методов в ансамбле (выведены из кросс-валидации):")
+    for method, w in sorted(model.ensemble_weights.items(), key=lambda kv: -kv[1]):
+        print(f"  {method:<10}: {w*100:5.1f}%")
+
     print(f"\nТочность на тестовой коллекции ({len(model.test_results)} документов):")
     for method, acc in model.accuracy.items():
         print(f"  {method:<10}: {acc*100:5.1f}%   ({model.times_ms[method]:.2f} мс суммарно)")

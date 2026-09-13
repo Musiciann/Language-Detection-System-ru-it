@@ -2,7 +2,12 @@
   "use strict";
 
   const LANG_NAMES = { ru: "Русский", it: "Итальянский" };
-  const METHOD_LABELS = { ngram: "Метод N-грамм", alphabet: "Алфавитный метод", neural: "Нейросетевой метод" };
+  const METHOD_LABELS = {
+    ngram: "Метод N-грамм",
+    alphabet: "Алфавитный метод",
+    neural: "Нейросетевой метод (MLP)",
+    ensemble: "Итоговое решение (ансамбль)",
+  };
 
   function escapeHtml(s) {
     return String(s)
@@ -44,25 +49,82 @@
     const pct = scoresToPercents(r.scores, r.kind);
     const ruPct = (pct.ru || 0).toFixed(1);
     const itPct = (pct.it || 0).toFixed(1);
+    const isEnsemble = methodKey === "ensemble";
     const card = document.createElement("div");
-    card.className = "result-card";
+    card.className = "result-card" + (isEnsemble ? " result-card-ensemble" : "");
+    const confBadge = isEnsemble
+      ? `<span class="conf-badge conf-${r.confidence_level === "высокая" ? "high" : r.confidence_level === "средняя" ? "mid" : "low"}">уверенность: ${r.confidence_level}</span>`
+      : "";
+    const agreementLine = isEnsemble
+      ? `<div class="result-time">согласие методов: ${Math.round((r.agreement || 0) * 100)}% · отрыв лидера: ${((r.margin || 0) * 100).toFixed(1)} п.п.</div>`
+      : "";
     card.innerHTML = `
       <div class="result-head">
         <span class="result-method">${METHOD_LABELS[methodKey]}</span>
         <span class="result-verdict ${r.best}">${LANG_NAMES[r.best]}</span>
       </div>
+      ${confBadge}
       <div class="bar-track">
         <div class="bar-fill ru" style="width:${ruPct}%"></div>
         <div class="bar-fill it" style="width:${itPct}%"></div>
       </div>
       <div class="bar-labels"><span>ru ${ruPct}%</span><span>it ${itPct}%</span></div>
-      <div class="result-time">${r.kind === "probability" ? "вероятность класса" : "мера расстояния (инвертирована для наглядности)"} · ${r.elapsed_ms.toFixed(2)} мс</div>`;
+      <div class="result-time">${r.kind === "probability" ? "вероятность класса" : "мера расстояния (инвертирована для наглядности)"} · ${r.elapsed_ms.toFixed(2)} мс</div>
+      ${agreementLine}`;
     return card;
   }
 
-  function renderResults(container, outcome) {
+  function renderExplanation(explanation) {
+    if (!explanation) return "";
+    const list = (label, items) => {
+      if (!items || !items.length) return `<div class="explain-row"><span class="explain-label">${label}:</span> <span class="hint">совпадений не найдено</span></div>`;
+      const chips = items.map((g) => `<code class="explain-chip">${escapeHtml(g)}</code>`).join(" ");
+      return `<div class="explain-row"><span class="explain-label">${label}:</span> ${chips}</div>`;
+    };
+    return `
+      <div class="explain-box">
+        <div class="explain-title">Почему «${LANG_NAMES[explanation.best]}»?</div>
+        ${list("N-граммы текста из топ-профиля языка", explanation.ngram_hits)}
+        ${list("Буквы, характерные для этого языка", explanation.alphabet_hits)}
+        ${list("Биграммы, важные для нейросети", explanation.neural_hits)}
+      </div>`;
+  }
+
+  function renderFeedback(text) {
+    const box = document.createElement("div");
+    box.className = "feedback-box";
+    box.innerHTML = `
+      <span class="feedback-label">Вердикт неверен? Подскажите правильный язык — модель дообучится:</span>
+      <button type="button" class="chip feedback-btn" data-lang="ru">это русский</button>
+      <button type="button" class="chip feedback-btn" data-lang="it">это итальянский</button>
+      <span class="feedback-status"></span>`;
+    box.querySelectorAll(".feedback-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const status = box.querySelector(".feedback-status");
+        status.textContent = "Отправляю…";
+        try {
+          const res = await postJSON("/api/feedback", { text, lang: btn.dataset.lang });
+          status.textContent = res.applied
+            ? "Спасибо — сеть дообучена на этом примере."
+            : "Модель уже была уверена и права — дообучение не потребовалось.";
+        } catch (e) {
+          status.textContent = "Ошибка: " + e.message;
+        }
+      });
+    });
+    return box;
+  }
+
+  function renderResults(container, outcome, text) {
     container.innerHTML = "";
+    if (outcome.ensemble) container.appendChild(renderResultCard("ensemble", outcome.ensemble));
     ["ngram", "alphabet", "neural"].forEach((key) => container.appendChild(renderResultCard(key, outcome[key])));
+    if (outcome.explanation) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = renderExplanation(outcome.explanation);
+      container.appendChild(wrap.firstElementChild);
+    }
+    if (typeof text === "string" && text.trim()) container.appendChild(renderFeedback(text));
   }
 
   const textarea = document.getElementById("input-text");
@@ -80,7 +142,7 @@
       try {
         const outcome = await postJSON("/api/classify", { text });
         if (outcome.empty) return null;
-        renderResults(resultsEl, outcome);
+        renderResults(resultsEl, outcome, text);
         return outcome;
       } catch (e) {
         resultsEl.innerHTML = `<p class="empty-hint">Ошибка: ${escapeHtml(e.message)}</p>`;
@@ -111,7 +173,6 @@
       resultsEl.innerHTML = '<p class="empty-hint">Начните печатать — результаты появятся автоматически.</p>';
     });
 
-    // ---------------- batch (пакет для отчёта) ----------------
     const batchList = document.getElementById("batch-list");
     const batchEmpty = document.getElementById("batch-empty");
     let batchItems = [];
@@ -129,7 +190,7 @@
         const chip = (r) => (r ? `<span class="tag ${r.best}">${LANG_NAMES[r.best]}</span>` : "");
         row.innerHTML = `
           <span class="fname">${escapeHtml(item.filename)}</span>
-          ${item.results ? ["ngram", "alphabet", "neural"].map((k) => chip(item.results[k])).join(" ") : "<span class=\"hint\">без предпросмотра</span>"}
+          ${item.results ? ["ensemble", "ngram", "alphabet", "neural"].map((k) => chip(item.results[k])).join(" ") : "<span class=\"hint\">без предпросмотра</span>"}
           <select data-id="${item.id}">
             <option value="">язык неизвестен</option>
             <option value="ru" ${item.expected === "ru" ? "selected" : ""}>ожид.: русский</option>
