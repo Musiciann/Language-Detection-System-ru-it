@@ -5,6 +5,14 @@ import datetime
 
 from config import LANG_NAMES, REPORTS_DIR, CORPUS_DIR, TEST_DIR, MODEL_PATH, MAX_UPLOAD_TEXT_CHARS
 from core.model import LanguageModel
+
+ALL_KEYS = ("ngram", "alphabet", "neural", "ensemble")
+METHOD_LABELS = {
+    "ngram": "N-грамм",
+    "alphabet": "Алфавитный",
+    "neural": "Нейросетевой (MLP)",
+    "ensemble": "Ансамбль (взвеш. голосование)",
+}
 from web.templating import render, escape
 
 _SAFE_NAME_RE = re.compile(r"[^A-Za-zА-Яа-яЁё0-9._-]+")
@@ -18,8 +26,15 @@ def _safe_filename(name: str, fallback: str) -> str:
     return name[:120]
 
 
-def _method_result_json(r: dict) -> dict:
-    return {"best": r["best"], "scores": r["scores"], "kind": r["kind"], "elapsed_ms": round(r["elapsed_ms"], 3)}
+def _method_result_json(key: str, r: dict) -> dict:
+    d = {"best": r["best"], "scores": r["scores"], "kind": r["kind"], "elapsed_ms": round(r["elapsed_ms"], 3)}
+    if key == "ensemble":
+        d["agreement"] = r.get("agreement")
+        d["margin"] = r.get("margin")
+        d["confidence_level"] = r.get("confidence_level")
+        d["weights"] = r.get("weights")
+    return d
+
 
 def classify(model: LanguageModel, body: dict) -> dict:
     text = (body or {}).get("text", "")
@@ -29,7 +44,10 @@ def classify(model: LanguageModel, body: dict) -> dict:
     if not text.strip():
         return {"empty": True}
     outcome = model.classify_text(text)
-    return {k: _method_result_json(v) for k, v in outcome.items()}
+    result = {k: _method_result_json(k, v) for k, v in outcome.items()}
+    result["explanation"] = model.explain(text, outcome)
+    return result
+
 
 def upload(model: LanguageModel, body: dict) -> dict:
     items = (body or {}).get("items", [])
@@ -46,9 +64,24 @@ def upload(model: LanguageModel, body: dict) -> dict:
         outcome = model.classify_text(text)
         results.append({
             "filename": fname,
-            "results": {k: _method_result_json(v) for k, v in outcome.items()},
+            "results": {k: _method_result_json(k, v) for k, v in outcome.items()},
         })
     return {"items": results}
+
+
+def feedback(model: LanguageModel, body: dict) -> dict:
+    text = (body or {}).get("text", "")
+    lang = (body or {}).get("lang", "")
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Поле 'text' пустое")
+    if lang not in LANG_NAMES:
+        raise ValueError("Поле 'lang' должно быть одним из: " + ", ".join(LANG_NAMES))
+    text = text[:MAX_UPLOAD_TEXT_CHARS]
+    changed = model.learn_from_feedback(text, lang)
+    if changed:
+        model.save(MODEL_PATH)
+    return {"ok": True, "applied": changed}
+
 
 def _method_cell(r: dict) -> str:
     lang = r["best"]
@@ -57,8 +90,9 @@ def _method_cell(r: dict) -> str:
         parts = " ".join(f"{LANG_NAMES.get(l,l)[:2].lower()}:{v:.3f}" for l, v in scores.items())
     else:
         parts = " ".join(f"{LANG_NAMES.get(l,l)[:2].lower()}:{v:.0f}" for l, v in scores.items())
+    extra = f' · увер.: {r["confidence_level"]}' if r.get("confidence_level") else ""
     return (f'<span class="tag {lang}">{LANG_NAMES.get(lang, lang)}</span>'
-            f'<div class="scores">{parts} · {r["elapsed_ms"]:.2f} мс</div>')
+            f'<div class="scores">{parts}{extra} · {r["elapsed_ms"]:.2f} мс</div>')
 
 
 def generate_report(model: LanguageModel, body: dict) -> dict:
@@ -73,9 +107,9 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
     os.makedirs(attachments_dir, exist_ok=True)
 
     rows_html = []
-    correct = {"ngram": 0, "alphabet": 0, "neural": 0}
+    correct = {k: 0 for k in ALL_KEYS}
     labeled_count = 0
-    totals_ms = {"ngram": 0.0, "alphabet": 0.0, "neural": 0.0}
+    totals_ms = {k: 0.0 for k in ALL_KEYS}
     used_names = set()
 
     for idx, item in enumerate(items):
@@ -108,9 +142,9 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
 
         expected_cell = f'<span class="tag {expected}">{LANG_NAMES[expected]}</span>' if expected else "—"
         if outcome:
-            method_cells = "".join(f"<td>{_method_cell(outcome[k])}</td>" for k in ("ngram", "alphabet", "neural"))
+            method_cells = "".join(f"<td>{_method_cell(outcome[k])}</td>" for k in ALL_KEYS)
         else:
-            method_cells = '<td colspan="3">пустой документ — пропущен</td>'
+            method_cells = '<td colspan="4">пустой документ — пропущен</td>'
 
         rows_html.append(f'''
         <tr>
@@ -122,9 +156,9 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
     n_items = len(items)
     if labeled_count:
         acc_rows = "".join(
-            f"<tr><td>{label}</td><td>{correct[key]}/{labeled_count} ({correct[key]/labeled_count*100:.0f}%)</td>"
+            f"<tr><td>{METHOD_LABELS[key]}</td><td>{correct[key]}/{labeled_count} ({correct[key]/labeled_count*100:.0f}%)</td>"
             f"<td>{totals_ms[key]:.2f} мс</td><td>{totals_ms[key]/max(n_items,1):.2f} мс</td></tr>"
-            for key, label in (("ngram", "N-грамм"), ("alphabet", "Алфавитный"), ("neural", "Нейросетевой"))
+            for key in ALL_KEYS
         )
         summary_block = f'''
         <p>Документов с указанным ожидаемым языком: {labeled_count} из {n_items}.</p>
@@ -134,8 +168,8 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
         </table>'''
     else:
         time_rows = "".join(
-            f"<tr><td>{label}</td><td>{totals_ms[key]:.2f} мс</td><td>{totals_ms[key]/max(n_items,1):.2f} мс</td></tr>"
-            for key, label in (("ngram", "N-грамм"), ("alphabet", "Алфавитный"), ("neural", "Нейросетевой"))
+            f"<tr><td>{METHOD_LABELS[key]}</td><td>{totals_ms[key]:.2f} мс</td><td>{totals_ms[key]/max(n_items,1):.2f} мс</td></tr>"
+            for key in ALL_KEYS
         )
         summary_block = f'''
         <p>Ожидаемый язык не указан ни для одного документа — точность не считается, только время обработки.</p>
@@ -148,6 +182,9 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
         f"{LANG_NAMES[l]} — {model.meta['corpus_docs'][l]} докум., {model.meta['corpus_chars'][l]} симв."
         for l in model.languages
     )
+    cv_summary = ", ".join(
+        f"{METHOD_LABELS[k]}: {model.cv_accuracy.get(k, 0)*100:.0f}%" for k in ALL_KEYS
+    ) if model.cv_accuracy else "не вычислена"
 
     report_html = render(
         "report.html",
@@ -158,6 +195,7 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
         top_n_grams=str(model.meta.get("top_n_grams", "?")),
         max_n=str(model.meta.get("max_n", "?")),
         bigram_vocab_size=str(model.meta.get("bigram_vocab_size", "?")),
+        cv_summary=cv_summary,
         items_rows="".join(rows_html),
         summary_block=summary_block,
     )
@@ -169,6 +207,7 @@ def generate_report(model: LanguageModel, body: dict) -> dict:
         f.write(f"created={now.strftime('%d.%m.%Y %H:%M:%S')}\nitem_count={n_items}\n")
 
     return {"url": f"/reports/{folder_name}/report.html", "folder": folder_name}
+
 
 def retrain() -> LanguageModel:
     model = LanguageModel.train(CORPUS_DIR, TEST_DIR)

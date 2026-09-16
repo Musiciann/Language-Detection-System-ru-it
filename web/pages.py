@@ -2,6 +2,15 @@ import os
 from config import LANG_NAMES, REPORTS_DIR
 from web.templating import render, render_page, escape
 
+METHOD_LABELS = {
+    "ngram": "N-грамм",
+    "alphabet": "Алфавитный",
+    "neural": "Нейросетевой (MLP)",
+    "ensemble": "Ансамбль",
+}
+ALL_KEYS = ("ngram", "alphabet", "neural", "ensemble")
+
+
 def index_page(model) -> str:
     corpus_info = " &nbsp;·&nbsp; ".join(
         f"{LANG_NAMES[l]}: {model.meta['corpus_docs'][l]} документов, {model.meta['corpus_chars'][l]} символов"
@@ -9,6 +18,7 @@ def index_page(model) -> str:
     )
     content = render("index.html", meta_row=corpus_info)
     return render_page(content, title="Определить язык")
+
 
 def _bar_row(label: str, value_pct: float, extra: str = "") -> str:
     return (f'<div class="bar-row"><span class="bar-label">{escape(label)}</span>'
@@ -67,25 +77,39 @@ def _neural_tables(model) -> str:
 
 
 def _accuracy_cards(model) -> str:
-    labels = {"ngram": "N-грамм", "alphabet": "Алфавитный", "neural": "Нейросетевой"}
     cards = []
-    for key, label in labels.items():
+    for key in ALL_KEYS:
         acc = model.accuracy.get(key, 0) * 100
+        cv = model.cv_accuracy.get(key, 0) * 100 if model.cv_accuracy else None
         t = model.times_ms.get(key, 0)
+        cv_line = f'<div class="stat-sub">кросс-валидация: {cv:.0f}%</div>' if cv is not None else ""
         cards.append(f'''
-        <div class="stat-card">
-          <div class="stat-method">{label}</div>
+        <div class="stat-card{ " stat-card-highlight" if key == "ensemble" else "" }">
+          <div class="stat-method">{METHOD_LABELS[key]}</div>
           <div class="stat-acc">{acc:.0f}%</div>
           <div class="stat-sub">точность на тестовой коллекции</div>
+          {cv_line}
           <div class="stat-sub">{t:.2f} мс суммарно</div>
         </div>''')
     return "".join(cards)
 
 
+def _ensemble_weights_block(model) -> str:
+    if not model.ensemble_weights:
+        return "<p class=\"empty-hint\">Веса ансамбля ещё не рассчитаны — переобучите модель.</p>"
+    max_w = max(model.ensemble_weights.values()) or 1
+    rows = "".join(
+        _bar_row(METHOD_LABELS.get(k, k), w / max_w * 100, f"{w*100:.1f}%")
+        for k, w in sorted(model.ensemble_weights.items(), key=lambda kv: -kv[1])
+    )
+    return f'<div class="bars">{rows}</div>'
+
+
 def _test_rows(model) -> str:
     def chip(r, true_lang):
         cls = "match" if r["best"] == true_lang else "mismatch"
-        return f'<span class="tag {r["best"]} {cls}">{LANG_NAMES[r["best"]]}</span>'
+        conf = f' title="{r.get("confidence_level")}"' if r.get("confidence_level") else ""
+        return f'<span class="tag {r["best"]} {cls}"{conf}>{LANG_NAMES[r["best"]]}</span>'
 
     rows = []
     for doc in model.test_results:
@@ -96,6 +120,7 @@ def _test_rows(model) -> str:
           <td>{chip(doc["ngram"], doc["true"])}</td>
           <td>{chip(doc["alphabet"], doc["true"])}</td>
           <td>{chip(doc["neural"], doc["true"])}</td>
+          <td>{chip(doc["ensemble"], doc["true"])}</td>
         </tr>''')
     return "".join(rows)
 
@@ -108,18 +133,23 @@ def model_page(model) -> str:
         bigram_vocab_size=str(model.meta.get("bigram_vocab_size", "?")),
         top_n_grams=str(model.meta.get("top_n_grams", "?")),
         max_n=str(model.meta.get("max_n", "?")),
+        hidden_size=str(model.meta.get("hidden_size", "?")),
+        cv_folds=str(model.meta.get("cv_folds", "?")),
         ngram_tables=_ngram_tables(model),
         alphabet_tables=_alphabet_tables(model),
         neural_tables=_neural_tables(model),
         accuracy_cards=_accuracy_cards(model),
+        ensemble_weights_block=_ensemble_weights_block(model),
         test_count=str(len(model.test_results)),
         test_rows=_test_rows(model),
     )
     return render_page(content, title="Модель и обучение")
 
+
 def task_page() -> str:
     content = render("task.html")
     return render_page(content, title="Условия работы")
+
 
 def reports_list_page() -> str:
     rows = []

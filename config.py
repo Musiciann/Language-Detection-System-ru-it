@@ -15,4 +15,4 @@ LANG_NAMES = {"ru": "Русский", "it": "Итальянский"}
 HOST = "127.0.0.1"
 PORT = 8765
 
-MAX_UPLOAD_TEXT_CHARS = 500_000   # защита от гигантских вставок/файлов
+MAX_UPLOAD_TEXT_CHARS = 500_000
