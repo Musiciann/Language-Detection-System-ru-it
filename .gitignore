@@ -1,2 +1,4 @@
 .idea
-.reports/
+.reports
+models
+__pycache__
